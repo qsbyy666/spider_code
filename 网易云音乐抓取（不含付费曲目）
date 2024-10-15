@@ -1,0 +1,109 @@
+# !/usr/bin/env python
+# -*- coding: utf-8 -*-
+# ------------------------------
+''''''
+import requests
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+import os
+import time
+
+if not os.path.exists('网易云音乐_歌单'):
+    os.makedirs('网易云音乐_歌单')
+
+
+class GetMusic(object):
+
+    def __init__(self):
+        self.service = Service(executable_path=r'F:\P C\chromedriver-win64\chromedriver.exe')
+        self.driver = webdriver.Chrome(service=self.service)
+
+    def switch_page(self):
+        url = 'https://music.163.com/#/discover/playlist/?'
+        self.driver.get(url)
+        data = WebDriverWait(self.driver, 10).until(EC.visibility_of_element_located((By.ID, 'g_iframe')))
+        self.driver.switch_to.frame(data)
+        all_page = self.driver.find_elements(By.XPATH, './/div[@class="u-page"]/a')
+        page_num = int(all_page[-2].text)
+        page_button = all_page[-1]
+        for i in range(1, page_num+1):
+            if i == 1:
+                self.driver.refresh()
+                self.get_all_list()
+            else:
+                data = WebDriverWait(self.driver, 10).until(EC.visibility_of_element_located((By.ID, 'g_iframe')))
+                self.driver.switch_to.frame(data)
+                all_page = self.driver.find_elements(By.XPATH, './/div[@class="u-page"]/a')
+                page_button = all_page[-1]
+                # page_button.click()   # 该方法在目标元素被遮挡时会报错
+                self.driver.execute_script("arguments[0].click();", page_button)
+                self.driver.refresh()
+                self.get_all_list()
+
+    def get_all_list(self):
+        # url = 'https://music.163.com/#/discover/playlist'
+        # self.driver.get(url)
+        time.sleep(2)
+        for i in range(1, 36):
+            gd_iframe = WebDriverWait(self.driver, 10).until(EC.visibility_of_element_located((By.ID, 'g_iframe')))
+            self.driver.switch_to.frame(gd_iframe)
+            gd_buttom = self.driver.find_elements(By.XPATH, './/ul[@id="m-pl-container"]/li[{}]/div/a'.format(i))[0]
+            gd_buttom.click()
+            self.driver.refresh()
+            self.get_one_list()
+
+    def get_one_list(self):
+        # 循环点击并推出，获取歌单名
+        # url = 'https://music.163.com/#/playlist?id=12210493597'
+        # self.driver.get(url)
+        list_ifram = WebDriverWait(self.driver, 10).until(EC.visibility_of_element_located((By.ID, 'g_iframe')))
+        self.driver.switch_to.frame(list_ifram)
+        gd_name = self.driver.find_elements(By.XPATH, './/h2[@class="f-ff2 f-brk"]')[0]
+        gd_name = gd_name.text
+        gd_name = ''.join(gd_name)
+        gd_name = gd_name.replace(':', '').replace('/', '').replace('.', '').replace('|', '')
+        data_list = self.driver.find_elements(By.XPATH, './/table[@class="m-table "]/tbody/tr')
+        for data in data_list:
+            self.parse_data(data, gd_name)
+        self.driver.back()
+
+    def parse_data(self, data, gd_name):
+        # 获取歌名和id
+        id = data.find_elements(By.XPATH, './/td[2]/div/div/div/span/a')[0]
+        id = id.get_attribute('href')
+        id = id.split('=')[1]
+        name_element = data.find_elements(By.XPATH, './/td[2]/div/div/div/span/a/b')[0]
+        name = name_element.get_attribute('title')
+        name = ''.join(name)
+        name = name.replace(':', '').replace('/', '').replace('.', '').replace('"', '').replace('\\', '').replace('*', '')
+        self.save_data(id, name, gd_name)
+
+    def save_data(self, id, name, gd_name):
+        headers = {
+            'Accept': '*/*',
+            'Accept-Language': 'zh-CN,zh;q=0.9',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Pragma': 'no-cache',
+            'Range': 'bytes=0-',
+            'Referer': 'http://m801.music.126.net/20240724214212/94ce868a7eab2ecb5d6f6d7e9eedcf63/jdymusic/obj/wo3DlMOGwrbDjj7DisKw/36246553659/104d/25b7/95f0/fb2745f3df9d05ff3111d177b8e14ed8.mp3',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+                    }
+        url = 'http://music.163.com/song/media/outer/url?id={}.mp3'.format(id)
+        data = requests.get(url, headers=headers).content
+        if not os.path.exists('网易云音乐_歌单/{}'.format(gd_name)):
+            os.makedirs('网易云音乐_歌单/{}'.format(gd_name))
+        with open(r'网易云音乐_歌单/{}/{}.mp3'.format(gd_name, name), 'wb')as f:
+            f.write(data)
+        print('保存成功--{}--{}'.format(gd_name, name))
+
+    def main(self):
+        self.switch_page()
+
+
+if __name__ == '__main__':
+    x =GetMusic()
+    x.main()
